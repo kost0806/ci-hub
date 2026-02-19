@@ -2,8 +2,8 @@
 # just-the-docs 테마 사용
 
 # 사이트 기본 정보
-title: AI 설계 문서 템플릿
-description: AI 기반 소프트웨어 설계 문서 관리 템플릿
+title: CI Hub
+description: CI Hub 설계 문서
 baseurl: "/ci-hub" # GitHub Pages 레포지토리 이름
 url: "https://kost0806.github.io" # GitHub Pages URL
 
@@ -72,7 +72,7 @@ aux_links:
 # 헤더 설정
 gh_edit_link: true
 gh_edit_link_text: "이 페이지 수정하기"
-gh_edit_repository: "https://github.com/kost0806/ci-hub
+gh_edit_repository: "https://github.com/kost0806/ci-hub"
 gh_edit_branch: "main"
 gh_edit_view_mode: "edit"
 
