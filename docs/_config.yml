@@ -75,6 +75,7 @@ gh_edit_link_text: "이 페이지 수정하기"
 gh_edit_repository: "https://github.com/kost0806/ci-hub"
 gh_edit_branch: "main"
 gh_edit_view_mode: "edit"
+gh_edit_source: docs
 
 # 컬렉션 설정 (선택사항)
 collections_dir: .
