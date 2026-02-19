@@ -4,7 +4,7 @@
 # 사이트 기본 정보
 title: AI 설계 문서 템플릿
 description: AI 기반 소프트웨어 설계 문서 관리 템플릿
-baseurl: "/design-document-by-ai-template" # GitHub Pages 레포지토리 이름
+baseurl: "/ci-hub" # GitHub Pages 레포지토리 이름
 url: "https://kost0806.github.io" # GitHub Pages URL
 
 # 테마 설정
@@ -33,7 +33,7 @@ mermaid:
 nav_sort: case_sensitive
 nav_external_links:
   - title: GitHub Repository
-    url: https://github.com/your-username/your-repo
+    url: https://github.com/kost0806/ci-hub
 
 # 푸터 설정
 footer_content: "Copyright &copy; 2024. AI 설계 문서 템플릿."
@@ -67,12 +67,12 @@ exclude:
 # Just the Docs 테마 커스터마이징
 aux_links:
   "GitHub에서 보기":
-    - "//github.com/kost0806/design-document-by-ai-template"
+    - "//github.com/kost0806/ci-hub"
 
 # 헤더 설정
 gh_edit_link: true
 gh_edit_link_text: "이 페이지 수정하기"
-gh_edit_repository: "https://github.com/kost0806/design-document-by-ai-template"
+gh_edit_repository: "https://github.com/kost0806/ci-hub
 gh_edit_branch: "main"
 gh_edit_view_mode: "edit"
 
