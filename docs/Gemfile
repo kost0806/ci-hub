@@ -1,0 +1,32 @@
+# Jekyll Gemfile
+source "https://rubygems.org"
+
+# Jekyll 버전
+gem "jekyll", "~> 4.3.0"
+
+# Just the Docs 테마
+gem "just-the-docs", "~> 0.7.0"
+
+# GitHub Pages 호환성 (선택사항)
+# gem "github-pages", group: :jekyll_plugins
+
+# Jekyll 플러그인
+group :jekyll_plugins do
+  gem "jekyll-seo-tag", "~> 2.8"
+  gem "jekyll-github-metadata", "~> 2.16"
+end
+
+# Windows 및 JRuby 플랫폼 지원
+platforms :mingw, :x64_mingw, :mswin, :jruby do
+  gem "tzinfo", ">= 1", "< 3"
+  gem "tzinfo-data"
+end
+
+# Windows 성능 향상
+gem "wdm", "~> 0.1", :platforms => [:mingw, :x64_mingw, :mswin]
+
+# JRuby에서 HTTP 파서 잠금
+gem "http_parser.rb", "~> 0.6.0", :platforms => [:jruby]
+
+# Webrick (Ruby 3.0+ 필요)
+gem "webrick", "~> 1.8"

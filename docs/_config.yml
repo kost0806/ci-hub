@@ -1,0 +1,80 @@
+# Jekyll 설정 파일
+# just-the-docs 테마 사용
+
+# 사이트 기본 정보
+title: AI 설계 문서 템플릿
+description: AI 기반 소프트웨어 설계 문서 관리 템플릿
+baseurl: "/design-document-by-ai-template" # GitHub Pages 레포지토리 이름
+url: "https://kost0806.github.io" # GitHub Pages URL
+
+# 테마 설정
+theme: just-the-docs
+remote_theme: just-the-docs/just-the-docs
+
+# 색상 테마
+color_scheme: light
+
+# 검색 기능 활성화
+search_enabled: true
+search:
+  heading_level: 2
+  previews: 3
+  preview_words_before: 5
+  preview_words_after: 10
+  tokenizer_separator: /[\s/]+/
+  rel_url: true
+  button: false
+
+# Mermaid 다이어그램 지원
+mermaid:
+  version: "10.6.1"
+
+# 네비게이션 설정
+nav_sort: case_sensitive
+nav_external_links:
+  - title: GitHub Repository
+    url: https://github.com/your-username/your-repo
+
+# 푸터 설정
+footer_content: "Copyright &copy; 2024. AI 설계 문서 템플릿."
+
+# Back to top 링크
+back_to_top: true
+back_to_top_text: "맨 위로"
+
+# 마크다운 설정
+markdown: kramdown
+kramdown:
+  syntax_highlighter_opts:
+    block:
+      line_numbers: true
+
+# 플러그인
+plugins:
+  - jekyll-seo-tag
+  - jekyll-github-metadata
+
+# 제외할 파일
+exclude:
+  - README.md
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - vendor
+  - .sass-cache
+  - .jekyll-cache
+
+# Just the Docs 테마 커스터마이징
+aux_links:
+  "GitHub에서 보기":
+    - "//github.com/kost0806/design-document-by-ai-template"
+
+# 헤더 설정
+gh_edit_link: true
+gh_edit_link_text: "이 페이지 수정하기"
+gh_edit_repository: "https://github.com/kost0806/design-document-by-ai-template"
+gh_edit_branch: "main"
+gh_edit_view_mode: "edit"
+
+# 컬렉션 설정 (선택사항)
+collections_dir: .

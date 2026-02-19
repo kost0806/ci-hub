@@ -1,0 +1,78 @@
+/* 커스텀 스타일 */
+
+/* Mermaid 다이어그램 스타일 */
+.mermaid {
+  text-align: center;
+  margin: 2rem 0;
+}
+
+/* 테이블 스타일 개선 */
+table {
+  width: 100%;
+  margin: 1.5rem 0;
+  border-collapse: collapse;
+}
+
+table th {
+  background-color: #f6f8fa;
+  font-weight: 600;
+}
+
+table td,
+table th {
+  padding: 0.75rem 1rem;
+  border: 1px solid #e1e4e8;
+}
+
+/* 체크리스트 스타일 */
+input[type="checkbox"] {
+  margin-right: 0.5rem;
+}
+
+/* 우선순위 뱃지 */
+.priority-high {
+  color: #d73a49;
+  font-weight: bold;
+}
+
+.priority-medium {
+  color: #f9826c;
+  font-weight: bold;
+}
+
+.priority-low {
+  color: #28a745;
+  font-weight: bold;
+}
+
+/* 코드 블록 개선 */
+pre {
+  border-radius: 6px;
+  padding: 1rem;
+  overflow-x: auto;
+}
+
+/* 알림 박스 */
+.note {
+  padding: 1rem;
+  margin: 1rem 0;
+  border-left: 4px solid #0366d6;
+  background-color: #f1f8ff;
+  border-radius: 4px;
+}
+
+.warning {
+  padding: 1rem;
+  margin: 1rem 0;
+  border-left: 4px solid #f9826c;
+  background-color: #fff5f5;
+  border-radius: 4px;
+}
+
+.tip {
+  padding: 1rem;
+  margin: 1rem 0;
+  border-left: 4px solid #28a745;
+  background-color: #f0fff4;
+  border-radius: 4px;
+}
