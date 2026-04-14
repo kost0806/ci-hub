@@ -77,6 +77,20 @@ Acceptance Criteria:
 - [ ] SonarQube 프로젝트 URL 제공
 ```
 
+**US-005: Kubernetes 배포 리소스 자동 셋업**
+```
+As a 서비스 개발자,
+I want to 프로젝트의 기술 스택에 맞는 Kubernetes manifest를 자동으로 생성하고,
+So that k8s 배포에 필요한 Deployment/Service/Ingress/ConfigMap을 직접 작성하지 않아도
+  별도 k8s-infra 리포지터리에서 관리할 수 있다.
+
+Acceptance Criteria:
+- [ ] 기술 스택별 Kubernetes manifest YAML 템플릿이 자동 선택됨
+- [ ] <프로젝트명>-k8s-infra 이름으로 GitHub Repository가 자동 생성됨
+- [ ] Deployment, Service, Ingress, ConfigMap 등 핵심 manifest가 생성됨
+- [ ] Jenkins가 해당 k8s-infra 리포를 clone하여 kubectl apply로 배포함
+```
+
 **US-004: CI 도구 공통 토큰 관리**
 ```
 As a 관리자,
@@ -156,6 +170,7 @@ Acceptance Criteria:
 - **처리**: 프로젝트 정보 및 CI 도구별 설정 상태 조회
 - **출력**:
   - 프로젝트 기본 정보
+  - Kubernetes 리소스 상태 (k8s-infra 리포 URL 포함)
   - GitHub Actions 상태 (PR URL 포함)
   - Jenkins 상태 (Job URL 포함)
   - SonarQube 상태 (프로젝트 URL 포함)
@@ -174,20 +189,86 @@ Acceptance Criteria:
 
 ---
 
-### 2.3 Jenkins 설정 (MVP Phase 1)
+### 2.3 Kubernetes Resource Setup (MVP Phase 1, 최우선)
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Frontend
+    participant Backend
+    participant GitHub API
+
+    User->>Frontend: Kubernetes 리소스 셋업 요청
+    Frontend->>Backend: POST /api/projects/{id}/kubernetes
+    Backend->>GitHub API: <프로젝트명>-k8s-infra 리포 생성
+    GitHub API-->>Backend: 리포 생성 완료 (URL)
+    Backend->>Backend: 기술 스택별 manifest 템플릿 렌더링
+    Backend->>GitHub API: Deployment/Service/Ingress/ConfigMap YAML 커밋
+    GitHub API-->>Backend: 커밋 완료
+    Backend->>Backend: k8s-infra 리포 URL DB 저장
+    Backend-->>Frontend: k8s-infra 리포 URL 반환
+    Frontend-->>User: 셋업 완료 (리포 링크 제공)
+```
+
+**FR-060: Kubernetes manifest 생성 및 k8s-infra 리포 생성**
+- **설명**: 프로젝트의 기술 스택에 맞는 Kubernetes manifest를 생성하고, `<프로젝트명>-k8s-infra` GitHub 리포지터리에 커밋한다.
+- **우선순위**: 🔴 Must have (MVP Phase 1)
+- **입력**:
+  - 프로젝트 ID
+  - 기술 스택 (프로젝트 생성 시 선택됨)
+- **처리**:
+  1. `<프로젝트명>-k8s-infra` 이름으로 GitHub Repository 생성
+  2. 기술 스택에 맞는 k8s manifest 템플릿 선택
+  3. 다음 manifest YAML 생성 및 커밋:
+     - `deployment.yaml` (Deployment)
+     - `service.yaml` (Service)
+     - `ingress.yaml` (Ingress)
+     - `configmap.yaml` (ConfigMap)
+  4. k8s-infra 리포 URL 및 설정 상태 DB 저장
+- **출력**:
+  - 성공: k8s-infra 리포 URL
+  - 실패: 에러 메시지 (GitHub 연동 실패, 리포 생성 실패 등)
+- **예외 처리**:
+  - GitHub App 미설치: 설치 안내 페이지 리다이렉트
+  - 동일 이름 리포 존재: 에러 메시지 및 수동 처리 안내
+
+**FR-061: Kubernetes manifest 템플릿 관리**
+- **설명**: 기술 스택별 Kubernetes manifest 템플릿을 제공한다.
+- **우선순위**: 🔴 Must have
+- **템플릿 구성**:
+  - **Java/Spring Boot**: Deployment(JVM 메모리 설정), Service(ClusterIP), Ingress, ConfigMap(JVM 옵션)
+  - **TypeScript/React**: Deployment(Nginx 기반), Service(ClusterIP), Ingress, ConfigMap(Nginx 설정)
+  - **Node.js (Backend)**: Deployment(Node.js), Service(ClusterIP), Ingress, ConfigMap(환경 변수)
+  - **JavaScript/Angular**: Deployment(Nginx 기반), Service(ClusterIP), Ingress, ConfigMap(Nginx 설정)
+
+**FR-062: Kubernetes Resource 상태 조회**
+- **설명**: 생성된 k8s-infra 리포의 상태를 조회한다.
+- **우선순위**: 🔴 Must have
+- **입력**: 프로젝트 ID
+- **처리**:
+  1. DB에서 k8s-infra 리포 URL 조회
+  2. GitHub API를 통해 리포 존재 여부 확인
+- **출력**:
+  - 리포 상태 (존재/삭제됨)
+  - k8s-infra 리포 URL
+
+---
+
+### 2.4 Jenkins 설정 (MVP Phase 3)
 
 **FR-030: Jenkins Job 생성**
-- **설명**: 프로젝트의 기술 스택에 맞는 Jenkins Build Configuration을 자동 생성한다.
-- **우선순위**: 🔴 Must have (MVP Phase 1)
+- **설명**: 프로젝트의 기술 스택에 맞는 Jenkins Pipeline을 자동 생성한다. 빌드/테스트 후 k8s-infra 리포를 clone하여 `kubectl apply`로 배포한다.
+- **우선순위**: 🔴 Must have (MVP Phase 3)
 - **입력**:
   - 프로젝트 ID
   - Jenkins 서버 URL (프로젝트별 또는 전역 설정)
 - **처리**:
-  1. 기술 스택에 맞는 Jenkins Job 템플릿 선택
-  2. Jenkins API를 통해 Job 생성 (Groovy DSL 또는 XML Config)
-  3. GitHub Repository 연동 설정
-  4. 빌드 트리거 설정 (GitHub Webhook)
-  5. Job URL 및 설정 상태 DB 저장
+  1. 기술 스택에 맞는 Jenkins Pipeline 템플릿 선택
+  2. Jenkins API를 통해 Pipeline Job 생성
+  3. GitHub Repository 연동 설정 (소스 리포)
+  4. 빌드 트리거 설정 (GitHub Actions에서 트리거)
+  5. **CD 단계 설정**: `<프로젝트명>-k8s-infra` 리포 clone 후 `kubectl apply -f .`
+  6. Job URL 및 설정 상태 DB 저장
 - **출력**:
   - 성공: Jenkins Job URL, Job 이름
   - 실패: 에러 메시지 (Jenkins 연동 실패, 권한 부족 등)
@@ -196,18 +277,22 @@ Acceptance Criteria:
   - Jenkins 서버 응답 없음: 서버 상태 확인 요청
   - 동일 Job 이름 존재: 새 Job 이름 생성 또는 기존 Job 업데이트
 
-**FR-031: Jenkins Job 템플릿 관리**
-- **설명**: 기술 스택별 Jenkins Job Configuration 템플릿을 제공한다.
+**FR-031: Jenkins Pipeline 템플릿 관리**
+- **설명**: 기술 스택별 Jenkins Pipeline 템플릿을 제공한다. 빌드/테스트 이후 k8s-infra 리포를 clone하여 `kubectl apply`로 배포하는 단계가 포함된다.
 - **우선순위**: 🔴 Must have
-- **템플릿 구성**:
+- **템플릿 구성 (공통 CD 단계 포함)**:
   - **Java/Spring Boot**:
     - GitHub 소스 가져오기, JDK 설정, Gradle/Maven 빌드, 테스트, 아티팩트 보관
+    - CD: `<프로젝트명>-k8s-infra` 리포 clone → `kubectl apply -f .`
   - **TypeScript/React**:
     - Node.js 설정, npm install, 빌드, 테스트, 정적 파일 아티팩트 보관
+    - CD: `<프로젝트명>-k8s-infra` 리포 clone → `kubectl apply -f .`
   - **Node.js (Backend)**:
     - Node.js 설정, npm install, 테스트, 아티팩트 보관
+    - CD: `<프로젝트명>-k8s-infra` 리포 clone → `kubectl apply -f .`
   - **JavaScript/Angular**:
     - Node.js 설정, npm install, Angular 빌드, 테스트
+    - CD: `<프로젝트명>-k8s-infra` 리포 clone → `kubectl apply -f .`
 
 **FR-032: Jenkins 상태 조회**
 - **설명**: 생성된 Jenkins Job의 상태를 조회한다.
@@ -224,7 +309,7 @@ Acceptance Criteria:
 
 ---
 
-### 2.4 GitHub Actions 설정 (MVP Phase 2)
+### 2.5 GitHub Actions 설정 (MVP Phase 2)
 
 ```mermaid
 sequenceDiagram
@@ -252,13 +337,13 @@ sequenceDiagram
 ```
 
 **FR-020: GitHub Actions Workflow 생성**
-- **설명**: 프로젝트의 기술 스택에 맞는 GitHub Actions Workflow를 자동 생성한다.
+- **설명**: push/PR 이벤트 시 Jenkins Job을 트리거하는 GitHub Actions Workflow를 자동 생성한다. 빌드·테스트·배포는 Jenkins가 전담하며 GitHub Actions는 트리거 역할만 수행한다.
 - **우선순위**: 🔴 Must have (MVP Phase 2)
 - **입력**:
   - 프로젝트 ID
-  - 기술 스택 (프로젝트 생성 시 선택됨)
+  - Jenkins Job URL (Phase 3 완료 시 연동)
 - **처리**:
-  1. 기술 스택에 맞는 Workflow 템플릿 선택
+  1. Jenkins 트리거 전용 Workflow 템플릿 선택
   2. Repository에 새 브랜치 생성 (예: `feature/ci-setup-{timestamp}`)
   3. `.github/workflows/{프로젝트명}.yml` 파일 생성 및 커밋
   4. Pull Request 생성
@@ -272,17 +357,13 @@ sequenceDiagram
   - 동일 브랜치 존재: 기존 브랜치 삭제 또는 새 브랜치명 생성
 
 **FR-021: GitHub Actions Workflow 템플릿 관리**
-- **설명**: 기술 스택별 Workflow 템플릿을 제공한다.
+- **설명**: Jenkins 트리거 전용 Workflow 템플릿을 제공한다. 기술 스택에 관계없이 동일한 트리거 패턴을 사용한다.
 - **우선순위**: 🔴 Must have
 - **템플릿 구성**:
-  - **Java/Spring Boot**:
-    - JDK 설정, Gradle/Maven 빌드, 단위 테스트, JAR 생성
-  - **TypeScript/React**:
-    - Node.js 설정, npm install, 빌드, 테스트
-  - **Node.js (Backend)**:
-    - Node.js 설정, npm install, 테스트, ESLint
-  - **JavaScript/Angular**:
-    - Node.js 설정, npm install, Angular 빌드, 테스트
+  - **공통 (모든 기술 스택)**:
+    - push / pull_request 이벤트 감지
+    - Jenkins Remote Build Trigger (Job URL + 토큰 기반 HTTP 호출)
+    - 트리거 성공 여부 확인 및 상태 출력
 
 **FR-022: GitHub Actions 상태 조회**
 - **설명**: 생성된 GitHub Actions의 상태를 조회한다.
@@ -299,7 +380,7 @@ sequenceDiagram
 
 ---
 
-### 2.5 SonarQube 설정 (MVP Phase 3)
+### 2.6 SonarQube 설정 (MVP Phase 4)
 
 **FR-040: SonarQube 프로젝트 생성**
 - **설명**: SonarQube에 프로젝트를 생성하고 GitHub과 연동한다.
@@ -349,7 +430,7 @@ sequenceDiagram
 
 ---
 
-### 2.6 CI 도구 연동 토큰 관리 (관리자 전용)
+### 2.7 CI 도구 연동 토큰 관리 (관리자 전용)
 
 > 토큰은 관리자가 시스템 전체에서 공통으로 사용할 토큰을 1회 등록한다.
 > 서비스 개발자는 토큰을 직접 입력하거나 조회할 수 없으며, BE가 CI 도구 API 호출 시 자동으로 사용한다.
@@ -425,6 +506,7 @@ graph TD
     Developer --> UC03[프로젝트 조회]
     Developer --> UC04[프로젝트 삭제]
 
+    Developer --> UC09[Kubernetes 리소스 셋업]
     Developer --> UC10[Jenkins 설정]
     Developer --> UC11[GitHub Actions 설정]
     Developer --> UC12[SonarQube 설정]
@@ -438,12 +520,16 @@ graph TD
     UC20 --> UC20C[SonarQube 토큰 등록]
     UC20 --> UC20D[토큰 갱신/삭제]
 
-    UC10 --> UC10A[Job 생성]
-    UC10 --> UC10B[빌드 트리거 설정]
+    UC09 --> UC09A[k8s-infra 리포 생성]
+    UC09 --> UC09B[manifest YAML 생성]
+    UC09 --> UC09C[상태 조회]
+
+    UC10 --> UC10A[Pipeline Job 생성]
+    UC10 --> UC10B[kubectl apply CD 설정]
     UC10 --> UC10C[상태 조회]
 
     UC11 --> UC11A[Workflow 생성]
-    UC11 --> UC11B[PR 생성]
+    UC11 --> UC11B[Jenkins 트리거 설정]
     UC11 --> UC11C[상태 조회]
 
     UC12 --> UC12A[프로젝트 생성]
@@ -452,6 +538,7 @@ graph TD
 
     style Developer fill:#e1f5ff
     style Admin fill:#f0e1ff
+    style UC09 fill:#e1fff4
     style UC10 fill:#ffe1e1
     style UC11 fill:#fff4e1
     style UC12 fill:#e1ffe1
@@ -468,9 +555,15 @@ graph TD
 - 물리적 CI 도구 (GitHub Actions, Jenkins Job, SonarQube 프로젝트)는 자동 삭제되지 않는다.
 
 **BR-002: CI 도구 설정 순서**
-- MVP 우선순위에 따라 Jenkins → GitHub Actions → SonarQube 순으로 설정을 권장한다.
+- MVP 우선순위에 따라 **Kubernetes 리소스 → GitHub Actions → Jenkins → SonarQube** 순으로 설정을 권장한다.
+- Jenkins CD 단계(`kubectl apply`)는 Kubernetes 리소스 셋업(k8s-infra 리포)이 먼저 완료되어야 동작한다.
 - SonarQube는 GitHub Actions가 먼저 설정되어야 통합 가능하다.
 - 각 CI 도구는 독립적으로 설정 가능하지만, 통합 시 순서 의존성이 있을 수 있다.
+
+**BR-009: k8s-infra 리포 네이밍 규칙**
+- Kubernetes manifest 리포지터리 이름은 `<프로젝트명>-k8s-infra` 형식을 따른다.
+- 동일 이름의 리포가 이미 존재하면 자동 생성하지 않고 에러를 반환한다.
+- 생성된 k8s-infra 리포는 프로젝트 삭제 시 자동으로 삭제되지 않으며, 수동 삭제 안내를 제공한다.
 
 **BR-003: 토큰 보안**
 - CI 도구 API 토큰은 관리자가 시스템 공통 토큰으로 1회 등록하며, 서비스 개발자에게는 노출되지 않는다.
@@ -567,6 +660,7 @@ graph TD
 
 | 필드 | 타입 | 필수 | 길이 | 규칙 |
 |------|------|------|------|------|
+| k8s-infra 리포 URL | String | ❌ | 최대 500 | GitHub Repository URL (`<프로젝트명>-k8s-infra`) |
 | GitHub PR URL | String | ❌ | 최대 500 | GitHub Pull Request URL |
 | GitHub 브랜치명 | String | ❌ | 최대 255 | 브랜치 네이밍 규칙 준수 |
 | Jenkins Job URL | String | ❌ | 최대 500 | Jenkins Job URL |
@@ -597,18 +691,21 @@ graph TD
 | FR-011 | 프로젝트 목록 조회 | 🔴 | All | 프로젝트 관리 | 프로젝트 API | TC-011 |
 | FR-012 | 프로젝트 상세 조회 | 🔴 | All | 프로젝트 관리 | 프로젝트 API | TC-012 |
 | FR-013 | 프로젝트 삭제 | 🟡 | Future | 프로젝트 관리 | 프로젝트 API | TC-013 |
-| FR-020 | GitHub Actions Workflow 생성 | 🔴 | Phase 2 | GitHub 연동 | GitHub API 클라이언트 | TC-020 |
+| FR-060 | Kubernetes manifest 생성 및 k8s-infra 리포 생성 | 🔴 | Phase 1 | Kubernetes 연동 | Kubernetes 서비스 | TC-060 |
+| FR-061 | Kubernetes manifest 템플릿 관리 | 🔴 | Phase 1 | 템플릿 엔진 | 템플릿 서비스 | TC-061 |
+| FR-062 | Kubernetes Resource 상태 조회 | 🔴 | Phase 1 | Kubernetes 연동 | GitHub API 클라이언트 | TC-062 |
+| FR-020 | GitHub Actions Workflow 생성 (Jenkins 트리거) | 🔴 | Phase 2 | GitHub 연동 | GitHub API 클라이언트 | TC-020 |
 | FR-021 | GitHub Actions 템플릿 관리 | 🔴 | Phase 2 | 템플릿 엔진 | 템플릿 서비스 | TC-021 |
 | FR-022 | GitHub Actions 상태 조회 | 🔴 | Phase 2 | GitHub 연동 | GitHub API 클라이언트 | TC-022 |
-| FR-030 | Jenkins Job 생성 | 🔴 | Phase 1 | Jenkins 연동 | Jenkins API 클라이언트 | TC-030 |
-| FR-031 | Jenkins 템플릿 관리 | 🔴 | Phase 1 | 템플릿 엔진 | 템플릿 서비스 | TC-031 |
-| FR-032 | Jenkins 상태 조회 | 🔴 | Phase 1 | Jenkins 연동 | Jenkins API 클라이언트 | TC-032 |
-| FR-040 | SonarQube 프로젝트 생성 | 🔴 | Phase 3 | SonarQube 연동 | SonarQube API 클라이언트 | TC-040 |
-| FR-041 | SonarQube GitHub Actions 통합 | 🔴 | Phase 3 | SonarQube 연동 | SonarQube API 클라이언트 | TC-041 |
-| FR-042 | SonarQube 상태 조회 | 🔴 | Phase 3 | SonarQube 연동 | SonarQube API 클라이언트 | TC-042 |
-| FR-050 | Jenkins API 공통 토큰 등록 (관리자) | 🔴 | Phase 1 | 토큰 관리 | 암호화 서비스 | TC-050 |
-| FR-051 | GitHub App 공통 토큰 등록 (관리자) | 🔴 | Phase 2 | 토큰 관리 | 암호화 서비스 | TC-051 |
-| FR-052 | SonarQube API 공통 토큰 등록 (관리자) | 🔴 | Phase 3 | 토큰 관리 | 암호화 서비스 | TC-052 |
+| FR-030 | Jenkins Pipeline 생성 (CI + kubectl apply CD) | 🔴 | Phase 3 | Jenkins 연동 | Jenkins API 클라이언트 | TC-030 |
+| FR-031 | Jenkins Pipeline 템플릿 관리 | 🔴 | Phase 3 | 템플릿 엔진 | 템플릿 서비스 | TC-031 |
+| FR-032 | Jenkins 상태 조회 | 🔴 | Phase 3 | Jenkins 연동 | Jenkins API 클라이언트 | TC-032 |
+| FR-040 | SonarQube 프로젝트 생성 | 🔴 | Phase 4 | SonarQube 연동 | SonarQube API 클라이언트 | TC-040 |
+| FR-041 | SonarQube GitHub Actions 통합 | 🔴 | Phase 4 | SonarQube 연동 | SonarQube API 클라이언트 | TC-041 |
+| FR-042 | SonarQube 상태 조회 | 🔴 | Phase 4 | SonarQube 연동 | SonarQube API 클라이언트 | TC-042 |
+| FR-050 | Jenkins API 공통 토큰 등록 (관리자) | 🔴 | Phase 3 | 토큰 관리 | 암호화 서비스 | TC-050 |
+| FR-051 | GitHub App 공통 토큰 등록 (관리자) | 🔴 | Phase 1 | 토큰 관리 | 암호화 서비스 | TC-051 |
+| FR-052 | SonarQube API 공통 토큰 등록 (관리자) | 🔴 | Phase 4 | 토큰 관리 | 암호화 서비스 | TC-052 |
 | FR-053 | 공통 토큰 조회 및 복호화 (BE 내부) | 🔴 | All | 토큰 관리 | 암호화 서비스 | TC-053 |
 | FR-054 | 공통 토큰 갱신/삭제 (관리자) | 🟡 | Future | 토큰 관리 | 토큰 API | TC-054 |
 

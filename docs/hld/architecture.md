@@ -42,9 +42,10 @@ C4Context
     Rel(developer, cihub, "프로젝트 생성, CI 설정, 상태 확인", "HTTPS")
     Rel(admin, cihub, "CI 도구 공통 토큰 관리", "HTTPS")
     Rel(cihub, keycloak, "사용자 인증 (OIDC)", "HTTPS")
-    Rel(cihub, github, "Workflow 파일 커밋, PR 생성", "HTTPS / GitHub App")
-    Rel(cihub, jenkins, "Jenkins Job 생성", "HTTP(S) / API Token")
+    Rel(cihub, github, "k8s-infra 리포 생성·커밋, Workflow PR 생성", "HTTPS / GitHub App")
+    Rel(cihub, jenkins, "Jenkins Pipeline Job 생성 (kubectl apply CD 포함)", "HTTP(S) / API Token")
     Rel(cihub, sonarqube, "SonarQube 프로젝트 생성", "HTTP(S) / API Token")
+    Rel(jenkins, github, "k8s-infra 리포 clone 후 kubectl apply", "HTTPS")
 ```
 
 ### 1.2 컨테이너 다이어그램 (C4 Level 2)
@@ -288,7 +289,39 @@ graph LR
 
 ## 5. 데이터 흐름
 
-### 5.1 GitHub Actions Workflow 생성 흐름
+### 5.1 Kubernetes Resource Setup 흐름 (Phase 1)
+
+```mermaid
+sequenceDiagram
+    actor Developer as 서비스 개발자
+    participant FE as React SPA
+    participant BE as Spring Boot API
+    participant DB as PostgreSQL
+    participant GH as GitHub API
+
+    Developer->>FE: Kubernetes 리소스 셋업 클릭
+    FE->>BE: POST /api/projects/{id}/kubernetes
+    Note over BE: JWT 토큰 검증 (Keycloak)
+    BE->>DB: 프로젝트 정보 조회
+    DB-->>BE: 프로젝트 (이름, 기술 스택)
+    BE->>DB: GitHub App 암호화 토큰 조회
+    DB-->>BE: 암호화된 토큰
+    Note over BE: AES-256-GCM 복호화 (메모리 내)
+    BE->>GH: <프로젝트명>-k8s-infra Repository 생성
+    GH-->>BE: 리포 생성 완료 (URL)
+    Note over BE: 기술 스택 기반 k8s manifest 템플릿 렌더링
+    BE->>GH: deployment.yaml 커밋
+    BE->>GH: service.yaml 커밋
+    BE->>GH: ingress.yaml 커밋
+    BE->>GH: configmap.yaml 커밋
+    GH-->>BE: 커밋 완료
+    BE->>DB: CI 설정 저장 (k8s-infra 리포 URL, 상태=CREATED)
+    DB-->>BE: 저장 완료
+    BE-->>FE: 201 Created + k8s-infra 리포 URL
+    FE-->>Developer: 셋업 완료 (리포 링크 표시)
+```
+
+### 5.2 GitHub Actions Workflow 생성 흐름 (Phase 2)
 
 ```mermaid
 sequenceDiagram
@@ -321,7 +354,7 @@ sequenceDiagram
     FE-->>Developer: 설정 완료 (PR 링크 표시)
 ```
 
-### 5.2 프로젝트 상세 조회 (CI 상태 포함)
+### 5.3 프로젝트 상세 조회 (CI 상태 포함)
 
 ```mermaid
 sequenceDiagram
@@ -359,7 +392,14 @@ sequenceDiagram
 
 ### 6.1 MVP 단계 아키텍처
 
-MVP에서는 단일 Docker Compose 환경으로 운영합니다.
+MVP는 4개 Phase로 구성되며, Kubernetes 배포 타겟 지원이 최우선입니다.
+
+| Phase | 기능 | 핵심 가치 |
+|-------|------|-----------|
+| **Phase 1** | Kubernetes manifest 생성 + `<프로젝트명>-k8s-infra` 리포 자동 생성 | k8s 배포 리소스 자동화 |
+| **Phase 2** | GitHub Actions — Jenkins 트리거 Workflow 생성 | CI 자동화 |
+| **Phase 3** | Jenkins Pipeline — 빌드/테스트 + k8s-infra clone 후 `kubectl apply` | CD 자동화 |
+| **Phase 4** | SonarQube 통합 | 코드 품질 분석 |
 
 - **동시 사용자 50명** 수용 (MVP 목표)
 - **단일 Spring Boot 인스턴스** (Scale-out 불필요)
@@ -497,7 +537,7 @@ graph LR
 - [x] 기술 스택 선정 및 문서화 완료 (Kotlin/Spring Boot/React/PostgreSQL/Keycloak)
 - [x] Docker Compose 배포 아키텍처 설계 완료
 - [x] React SPA Static Serving 방식 정의 완료
-- [x] 데이터 흐름 정의 완료 (GitHub Actions 생성, 상태 조회)
+- [x] 데이터 흐름 정의 완료 (Kubernetes 리소스 셋업, GitHub Actions 생성, 상태 조회)
 - [x] 확장 전략 수립 완료
 - [x] 보안 아키텍처 설계 완료 (OIDC, AES-256-GCM)
 - [x] 운영/모니터링 전략 정의 완료

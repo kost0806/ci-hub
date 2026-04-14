@@ -142,12 +142,13 @@ graph TD
 ### 2.1 MVP 범위 제약
 
 **CONS-100: MVP 우선순위 (확정)**
-- **제약**: GitHub Actions → Jenkins → SonarQube 순서로 개발 완료
-- **이유**: 프로젝트 요구사항 및 점진적 가치 제공
+- **제약**: Kubernetes 리소스 셋업 → GitHub Actions → Jenkins → SonarQube 순서로 개발 완료
+- **이유**: Kubernetes 배포 타겟이 주요 목표이며, Jenkins CD(kubectl apply)가 k8s-infra 리포에 의존하므로 최우선 구현
 - **영향**:
-  - Phase 1: GitHub Actions만 동작
-  - Phase 2: GitHub Actions + Jenkins 동작
-  - Phase 3: 모든 CI 도구 통합
+  - Phase 1: Kubernetes manifest 생성 + `<프로젝트명>-k8s-infra` 리포 자동 생성
+  - Phase 2: GitHub Actions — Jenkins 트리거 Workflow 생성
+  - Phase 3: Jenkins Pipeline — 빌드/테스트 + k8s-infra clone 후 `kubectl apply` CD
+  - Phase 4: SonarQube 통합
   - 각 Phase별 독립적인 배포 가능
 
 **CONS-101: 템플릿 제약 (확정)**
