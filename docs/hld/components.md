@@ -38,6 +38,7 @@ graph TB
         CIController[CI Setup Controller]
         AdminController[Admin Controller]
         ProjectService[Project Service]
+        KubernetesService[Kubernetes Service]
         GitHubActionsService[GitHub Actions Service]
         JenkinsService[Jenkins Service]
         SonarQubeService[SonarQube Service]
@@ -68,12 +69,16 @@ graph TB
     SecurityFilter --> KC
 
     ProjectController --> ProjectService
+    CIController --> KubernetesService
     CIController --> GitHubActionsService
     CIController --> JenkinsService
     CIController --> SonarQubeService
     AdminController --> TokenService
 
     ProjectService --> ProjectRepo
+    KubernetesService --> TokenService
+    KubernetesService --> TemplateEngine
+    KubernetesService --> GitHubClient
     GitHubActionsService --> TokenService
     GitHubActionsService --> TemplateEngine
     GitHubActionsService --> GitHubClient
@@ -107,7 +112,7 @@ graph TB
 /login              → 로그인 (Keycloak 리다이렉트)
 /projects           → 프로젝트 목록 [인증 필요]
 /projects/new       → 프로젝트 생성 [인증 필요]
-/projects/:id       → 프로젝트 상세 + CI 상태 [인증 필요]
+/projects/:id       → 프로젝트 상세 + CI 상태 (k8s-infra 리포 포함) [인증 필요]
 /admin/tokens       → CI 도구 토큰 관리 [관리자 전용]
 ```
 
@@ -129,7 +134,7 @@ graph TB
 | `ProjectListPage` | 프로젝트 목록, CI 상태 배지, 프로젝트 생성 버튼 |
 | `ProjectCreatePage` | 단계별 프로젝트 생성 폼 (프로젝트명 → Repository URL → 기술 스택) |
 | `ProjectDetailPage` | 프로젝트 정보 + CI 도구별 상태 카드 |
-| `CIStatusCard` | 각 CI 도구 상태 표시 (URL 링크, 설정 버튼, 상태 배지) |
+| `CIStatusCard` | 각 CI 도구 상태 표시 (URL 링크, 설정 버튼, 상태 배지) — k8s-infra 리포 포함 |
 | `TechStackSelector` | 기술 스택 선택 UI (Java/Spring Boot, TypeScript/React, Node.js, JavaScript/Angular) |
 
 **관리자 관련**
@@ -200,14 +205,16 @@ sequenceDiagram
 
 | HTTP 메서드 | 경로 | Phase | 역할 |
 |-------------|------|-------|------|
-| `POST` | `/api/projects/{id}/jenkins` | Phase 1 | Jenkins Job 생성 |
-| `GET` | `/api/projects/{id}/jenkins` | Phase 1 | Jenkins 상태 조회 |
-| `POST` | `/api/projects/{id}/github-actions` | Phase 2 | GitHub Actions Workflow 생성 |
+| `POST` | `/api/projects/{id}/kubernetes` | Phase 1 | k8s manifest 생성 + k8s-infra 리포 생성 |
+| `GET` | `/api/projects/{id}/kubernetes` | Phase 1 | k8s-infra 리포 상태 조회 |
+| `POST` | `/api/projects/{id}/github-actions` | Phase 2 | GitHub Actions Workflow 생성 (Jenkins 트리거) |
 | `GET` | `/api/projects/{id}/github-actions` | Phase 2 | GitHub Actions 상태 조회 |
-| `POST` | `/api/projects/{id}/sonarqube` | Phase 3 | SonarQube 프로젝트 생성 |
-| `GET` | `/api/projects/{id}/sonarqube` | Phase 3 | SonarQube 상태 조회 |
+| `POST` | `/api/projects/{id}/jenkins` | Phase 3 | Jenkins Pipeline Job 생성 (kubectl apply CD 포함) |
+| `GET` | `/api/projects/{id}/jenkins` | Phase 3 | Jenkins 상태 조회 |
+| `POST` | `/api/projects/{id}/sonarqube` | Phase 4 | SonarQube 프로젝트 생성 |
+| `GET` | `/api/projects/{id}/sonarqube` | Phase 4 | SonarQube 상태 조회 |
 
-**의존성**: `JenkinsService`, `GitHubActionsService`, `SonarQubeService`
+**의존성**: `KubernetesService`, `GitHubActionsService`, `JenkinsService`, `SonarQubeService`
 
 ### 3.4 Admin Controller
 
@@ -237,9 +244,44 @@ sequenceDiagram
 
 **의존성**: `ProjectRepository`, `CIConfigRepository`
 
-### 3.6 GitHub Actions Service (Phase 2)
+### 3.6 Kubernetes Service (Phase 1)
 
-**책임**: GitHub Actions Workflow 생성 비즈니스 로직
+**책임**: `<프로젝트명>-k8s-infra` GitHub Repository 생성 및 Kubernetes manifest YAML 생성·커밋 비즈니스 로직
+
+```mermaid
+sequenceDiagram
+    participant Ctrl as CI Setup Controller
+    participant Svc as KubernetesService
+    participant Token as TokenService
+    participant Tmpl as TemplateEngine
+    participant GH as GitHubApiClient
+    participant DB as CIConfigRepository
+
+    Ctrl->>Svc: setupKubernetes(projectId, userId)
+    Svc->>Token: getDecryptedToken(GITHUB)
+    Token-->>Svc: 복호화된 GitHub App Token
+    Svc->>DB: 프로젝트 정보 조회 (이름, 기술 스택, GitHub owner)
+    DB-->>Svc: 프로젝트 정보
+    Svc->>GH: createRepository(owner, "<프로젝트명>-k8s-infra")
+    GH-->>Svc: 리포 생성 완료 (URL)
+    Svc->>Tmpl: getK8sManifestTemplates(techStack)
+    Tmpl-->>Svc: deployment/service/ingress/configmap YAML 문자열
+    Svc->>GH: commitFile(repoUrl, "deployment.yaml", yaml)
+    Svc->>GH: commitFile(repoUrl, "service.yaml", yaml)
+    Svc->>GH: commitFile(repoUrl, "ingress.yaml", yaml)
+    Svc->>GH: commitFile(repoUrl, "configmap.yaml", yaml)
+    GH-->>Svc: 커밋 완료
+    Svc->>DB: save(projectId, k8sInfraRepoUrl, status=CREATED)
+    Svc-->>Ctrl: KubernetesSetupResult
+```
+
+**의존성**: `TokenService`, `TemplateEngine`, `GitHubApiClient`, `CIConfigRepository`
+
+---
+
+### 3.7 GitHub Actions Service (Phase 2)
+
+**책임**: Jenkins 트리거 전용 GitHub Actions Workflow 생성 비즈니스 로직. 빌드/테스트는 Jenkins가 담당하며, GitHub Actions는 push/PR 이벤트를 Jenkins에게 전달하는 역할만 수행한다.
 
 ```mermaid
 sequenceDiagram
@@ -253,8 +295,10 @@ sequenceDiagram
     Ctrl->>Svc: setupGitHubActions(projectId, userId)
     Svc->>Token: getDecryptedToken(GITHUB)
     Token-->>Svc: 복호화된 GitHub App Token
-    Svc->>Tmpl: getWorkflowTemplate(techStack)
-    Tmpl-->>Svc: Workflow YAML 문자열
+    Svc->>DB: Jenkins Job URL 조회
+    DB-->>Svc: Jenkins Job URL
+    Svc->>Tmpl: getJenkinsTriggerWorkflowTemplate(jenkinsJobUrl)
+    Tmpl-->>Svc: Jenkins 트리거 Workflow YAML 문자열
     Svc->>GH: createBranch(repoUrl, branchName)
     Svc->>GH: commitFile(branch, ".github/workflows/ci.yml", yaml)
     Svc->>GH: createPullRequest(branch, title)
@@ -265,16 +309,24 @@ sequenceDiagram
 
 **의존성**: `TokenService`, `TemplateEngine`, `GitHubApiClient`, `CIConfigRepository`
 
-### 3.7 Jenkins Service (Phase 1)
+### 3.7 Jenkins Service (Phase 3)
 
-**책임**: Jenkins Job 생성 비즈니스 로직
+**책임**: Jenkins Pipeline Job 생성 비즈니스 로직. CI(빌드/테스트)와 CD(`kubectl apply`) 를 모두 담당하는 Pipeline을 생성한다.
 
 **주요 로직**:
 1. 공통 Jenkins 토큰 복호화
-2. 기술 스택에 맞는 Jenkins Job XML 템플릿 선택
-3. Jenkins API를 통해 Job 생성
-4. GitHub Webhook URL 설정
+2. 기술 스택에 맞는 Jenkins Pipeline 템플릿 선택
+3. Jenkins API를 통해 Pipeline Job 생성
+4. CD 단계 설정: `<프로젝트명>-k8s-infra` 리포 URL을 Pipeline 스크립트에 주입
 5. Job URL 및 상태 DB 저장
+
+**CD 흐름** (Pipeline 내부):
+```
+stage('Checkout') → stage('Build & Test') → stage('Deploy') {
+    git clone <프로젝트명>-k8s-infra
+    kubectl apply -f .
+}
+```
 
 **중복 처리**: 동일 Job 이름 존재 시 숫자 suffix 추가 (`project-name-2`)
 
@@ -330,18 +382,22 @@ graph TD
 
 **지원 템플릿**:
 
-| 기술 스택 | GitHub Actions Workflow | Jenkins Job XML |
-|-----------|-------------------------|-----------------|
-| Java/Spring Boot | Gradle/Maven 빌드, JUnit 테스트, JAR 생성 | JDK 설정, Gradle/Maven 빌드, 테스트, 아티팩트 보관 |
-| TypeScript/React | Node.js 설정, npm install, 빌드, Jest 테스트 | Node.js 설정, npm install, 빌드, 테스트 |
-| Node.js | Node.js 설정, npm install, 테스트, ESLint | Node.js 설정, npm install, 테스트 |
-| JavaScript/Angular | Node.js 설정, npm install, Angular 빌드, 테스트 | Node.js 설정, npm install, Angular 빌드, 테스트 |
+| 기술 스택 | k8s Manifests | GitHub Actions Workflow | Jenkins Pipeline |
+|-----------|---------------|-------------------------|-----------------|
+| Java/Spring Boot | Deployment(JVM 설정), Service, Ingress, ConfigMap | Jenkins 트리거 | Gradle/Maven 빌드, 테스트, kubectl apply |
+| TypeScript/React | Deployment(Nginx), Service, Ingress, ConfigMap(Nginx 설정) | Jenkins 트리거 | npm 빌드, 테스트, kubectl apply |
+| Node.js | Deployment(Node.js), Service, Ingress, ConfigMap | Jenkins 트리거 | npm 빌드, 테스트, kubectl apply |
+| JavaScript/Angular | Deployment(Nginx), Service, Ingress, ConfigMap(Nginx 설정) | Jenkins 트리거 | npm 빌드, Angular 빌드, kubectl apply |
 
 **템플릿 저장 위치**: `src/main/resources/templates/`
-- `github-actions/java-spring-boot.yml`
-- `github-actions/typescript-react.yml`
-- `github-actions/nodejs.yml`
-- `github-actions/javascript-angular.yml`
+- `kubernetes/java-spring-boot/deployment.yaml`
+- `kubernetes/java-spring-boot/service.yaml`
+- `kubernetes/java-spring-boot/ingress.yaml`
+- `kubernetes/java-spring-boot/configmap.yaml`
+- `kubernetes/typescript-react/` (동일 구조)
+- `kubernetes/nodejs/` (동일 구조)
+- `kubernetes/javascript-angular/` (동일 구조)
+- `github-actions/jenkins-trigger.yml` (기술 스택 공통)
 - `jenkins/java-spring-boot.xml`
 - `jenkins/typescript-react.xml`
 - `jenkins/nodejs.xml`
@@ -489,6 +545,7 @@ graph TD
     CICtrl[CI Setup Controller]
     AdminCtrl[Admin Controller]
     ProjSvc[Project Service]
+    K8sSvc[Kubernetes Service]
     GHSvc[GitHub Actions Service]
     JKSvc[Jenkins Service]
     SQSvc[SonarQube Service]
@@ -510,6 +567,7 @@ graph TD
 
     SecFilter --> KC
     ProjCtrl --> ProjSvc
+    CICtrl --> K8sSvc
     CICtrl --> GHSvc
     CICtrl --> JKSvc
     CICtrl --> SQSvc
@@ -517,6 +575,10 @@ graph TD
 
     ProjSvc --> ProjRepo
     ProjSvc --> CIRepo
+    K8sSvc --> TokenSvc
+    K8sSvc --> Tmpl
+    K8sSvc --> GHClient
+    K8sSvc --> CIRepo
     GHSvc --> TokenSvc
     GHSvc --> Tmpl
     GHSvc --> GHClient
@@ -540,6 +602,7 @@ graph TD
 
     style TokenSvc fill:#ffe1e1
     style Tmpl fill:#e1ffe1
+    style K8sSvc fill:#e1fff4
     style DB fill:#e1f5ff
 ```
 
@@ -643,7 +706,7 @@ cihub:
 
 - [x] Frontend 컴포넌트 정의 완료 (페이지 구조, 주요 컴포넌트)
 - [x] Backend 컴포넌트 정의 완료 (Controller, Service, Repository)
-- [x] CI 도구별 Service 컴포넌트 정의 완료 (GitHub Actions, Jenkins, SonarQube)
+- [x] CI 도구별 Service 컴포넌트 정의 완료 (Kubernetes, GitHub Actions, Jenkins, SonarQube)
 - [x] Token Service (AES-256-GCM) 정의 완료
 - [x] Template Engine 컴포넌트 정의 완료
 - [x] Infrastructure 컴포넌트 정의 완료 (API Client, Repository)
